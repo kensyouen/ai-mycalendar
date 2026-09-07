@@ -46,7 +46,7 @@ GCP_SA_JSON = os.environ.get("GCP_SA_JSON")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash') # 最新の高速モデルを使用
+model = genai.GenerativeModel('gemini-3.6-flash') # 最新の高速モデルを使用
 
 # スプレッドシート接続関数
 @st.cache_resource
