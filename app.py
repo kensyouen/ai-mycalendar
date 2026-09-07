@@ -9,43 +9,21 @@ import os
 from datetime import datetime
 import pytz
 
-# --- iOS風の超スタイリッシュなデザイン設定 (カスタムCSS) ---
+# --- iOS風の超スタイリッシュなデザイン設定 ---
 st.set_page_config(page_title="AI Calendar", page_icon="📅", layout="centered")
 st.markdown("""
 <style>
-    /* 全体の背景をiOSのシステムグレー風に */
     .stApp { background-color: #F2F2F7; }
     html, body, [class*="css"] { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-    /* ヘッダーとフッターを隠してネイティブアプリっぽく */
     header { visibility: hidden; }
     footer { visibility: hidden; }
-    
-    /* タブをiOSのセグメントコントロール風に */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 6px; background-color: #E3E3E8; border-radius: 12px; padding: 4px; margin-bottom: 20px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 9px; padding: 8px 16px; background-color: transparent; border: none; color: #8E8E93; font-weight: 600;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #FFFFFF !important; color: #000000 !important; box-shadow: 0 3px 6px rgba(0,0,0,0.08);
-    }
-    /* ボタンを丸くスタイリッシュに */
-    .stButton > button {
-        border-radius: 14px; font-weight: 600; height: 48px; border: none; width: 100%; transition: 0.2s;
-    }
-    .stButton > button[data-testid="baseButton-primary"] {
-        background-color: #007AFF; color: white;
-    }
-    .stButton > button[data-testid="baseButton-secondary"] {
-        background-color: #FFFFFF; color: #007AFF; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    /* 入力フォームの角丸化 */
-    div[data-baseweb="input"] > div, div[data-baseweb="textarea"] > textarea, div[data-baseweb="select"] > div {
-        border-radius: 12px !important; border: 1px solid #E5E5EA !important; background-color: #FFFFFF !important;
-    }
-    /* 展開メニュー（Expander）のデザイン */
-    .streamlit-expanderHeader { font-weight: bold; color: #1C1C1E; }
+    .stTabs [data-baseweb="tab-list"] { gap: 6px; background-color: #E3E3E8; border-radius: 12px; padding: 4px; margin-bottom: 20px; }
+    .stTabs [data-baseweb="tab"] { border-radius: 9px; padding: 8px 16px; background-color: transparent; border: none; color: #8E8E93; font-weight: 600; }
+    .stTabs [aria-selected="true"] { background-color: #FFFFFF !important; color: #000000 !important; box-shadow: 0 3px 6px rgba(0,0,0,0.08); }
+    .stButton > button { border-radius: 14px; font-weight: 600; height: 48px; border: none; width: 100%; transition: 0.2s; }
+    .stButton > button[data-testid="baseButton-primary"] { background-color: #007AFF; color: white; }
+    div[data-baseweb="input"] > div, div[data-baseweb="textarea"] > textarea, div[data-baseweb="select"] > div { border-radius: 12px !important; border: 1px solid #E5E5EA !important; background-color: #FFFFFF !important; }
+    div[data-testid="stDialog"] > div { border-radius: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -58,7 +36,7 @@ GCP_SA_JSON = os.environ.get("GCP_SA_JSON")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-3.6-flash') # AIモデル
+model = genai.GenerativeModel('gemini-3.6-flash') 
 
 @st.cache_resource
 def init_gspread():
@@ -72,28 +50,52 @@ def init_gspread():
 
 sheet = init_gspread()
 
-# --- 機能: AI解析 ---
+# --- AI解析関数 (新規追加) ---
 def extract_schedule_from_memo(memo_text):
     prompt = f"""
-    あなたは優秀なAI秘書です。以下のユーザーの予定メモから、スケジュール情報を抽出し、必ず指定されたJSONフォーマットのみで出力してください。
-    【現在の日本時間】: {now_jst.strftime('%Y年%m月%d日 %H:%M')}
-    【ユーザーのメモ】: {memo_text}
-    【出力JSONフォーマット】
+    優秀なAI秘書として、メモからスケジュールを抽出しJSONで出力してください。
+    【現在時刻】: {now_jst.strftime('%Y年%m月%d日 %H:%M')}
+    【メモ】: {memo_text}
+    【出力JSON】
     {{
-        "title": "予定のタイトル",
+        "title": "予定タイトル",
         "start_time": "YYYY-MM-DD HH:MM:00",
-        "end_time": "YYYY-MM-DD HH:MM:00",
-        "memo": "詳細",
-        "notify_minutes_before": 60 
+        "end_time": "YYYY-MM-DD HH:MM:00"
     }}
-    ※notify_minutes_beforeは通知タイミングを分単位の整数で出力。指定がなければ60。
+    ※JSON以外のテキストは含めないでください。
     """
     response = model.generate_content(prompt)
     try:
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(clean_text)
-    except Exception as e:
-        st.error(f"解析エラー: もう少し具体的に書いてみてください。")
+    except Exception:
+        return None
+
+# --- AI解析関数 (編集・書き換え用) ---
+def edit_schedule_with_ai(record, edit_instruction):
+    prompt = f"""
+    あなたは優秀なAI秘書です。現在の予定に対して、ユーザーの「変更指示」を適用し、更新後の予定をJSONで出力してください。
+    
+    【現在の予定】
+    タイトル: {record['title']}
+    開始: {record['start_time']}
+    終了: {record['end_time']}
+    
+    【変更指示】: {edit_instruction}
+    
+    【出力JSONフォーマット】
+    {{
+        "title": "変更後のタイトル",
+        "start_time": "YYYY-MM-DD HH:MM:00",
+        "end_time": "YYYY-MM-DD HH:MM:00"
+    }}
+    ※JSON以外のテキストは含めないでください。
+    """
+    response = model.generate_content(prompt)
+    try:
+        clean_text = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_text)
+    except Exception:
         return None
 
 # --- ポップアップ（ダイアログ）機能 ---
@@ -102,22 +104,36 @@ def show_event_details(event):
     st.markdown(f"### {event['title']}")
     st.write(f"**⏰ 日時:** {event['start']} 〜 {event['end']}")
     props = event.get('extendedProps', {})
-    st.write(f"**📝 メモ:** {props.get('memo', '')}")
+    if props.get('memo'):
+        st.write(f"**📝 メモ:**\n{props.get('memo')}")
     st.info(f"🔔 通知: {props.get('notify', 0)}分前")
 
 @st.dialog("✏️ 予定の編集")
 def edit_event_dialog(record):
-    st.markdown("内容を書き換えて保存してください。")
-    new_title = st.text_input("タイトル", value=record['title'])
-    new_start = st.text_input("開始日時 (YYYY-MM-DD HH:MM:SS)", value=record['start_time'])
-    new_end = st.text_input("終了日時 (YYYY-MM-DD HH:MM:SS)", value=record['end_time'])
-    new_memo = st.text_area("詳細メモ", value=record['memo'])
-    new_notify = st.number_input("通知(分前)", value=int(record['notify_minutes_before']), step=15)
+    st.markdown("**✨ AIにお任せ編集**")
+    ai_edit_memo = st.text_input("例：「時間を16時にずらして」「タイトルを会議に変更」", key=f"ai_input_{record['id']}")
     
-    if st.button("💾 更新を保存", type="primary"):
+    if st.button("✨ AIで変更内容を適用", key=f"ai_btn_{record['id']}", type="primary"):
+        if ai_edit_memo:
+            with st.spinner("AIが予定を修正中..."):
+                updated_data = edit_schedule_with_ai(record, ai_edit_memo)
+                if updated_data:
+                    record['title'] = updated_data.get('title', record['title'])
+                    record['start_time'] = updated_data.get('start_time', record['start_time'])
+                    record['end_time'] = updated_data.get('end_time', record['end_time'])
+                    st.success("✅ 内容を書き換えました！下の「手動編集・保存」から保存してください。")
+    
+    st.divider()
+    st.markdown("**✍️ 手動編集・保存**")
+    new_title = st.text_input("タイトル", value=record['title'], key=f"title_{record['id']}")
+    new_start = st.text_input("開始日時", value=record['start_time'], key=f"start_{record['id']}")
+    new_end = st.text_input("終了日時", value=record['end_time'], key=f"end_{record['id']}")
+    new_memo = st.text_area("詳細・通知用メモ", value=record['memo'], key=f"memo_{record['id']}")
+    new_notify = st.number_input("通知(分前)", value=int(record['notify_minutes_before']), step=15, key=f"notify_{record['id']}")
+    
+    if st.button("💾 この内容で更新を保存", key=f"save_{record['id']}"):
         cell = sheet.find(record['id'])
         if cell:
-            # gspreadのupdate機能で該当行を丸ごと書き換え
             sheet.update(f"B{cell.row}:G{cell.row}", [[new_title, new_start, new_end, new_memo, new_notify, record['is_notified']]])
             st.success("更新しました！")
             st.rerun()
@@ -129,12 +145,14 @@ tab1, tab2, tab3 = st.tabs(["✍️ 追加", "🗓️ カレンダー", "📋 �
 
 # 【タブ1: 予定の追加】
 with tab1:
-    st.write("予定の内容を入力してください。")
-    memo_input = st.text_area("予定メモ", placeholder="例：明日の15時にトヨペットで納車予定", height=120)
+    st.write("**① AIに予定を登録してもらう**")
+    memo_input = st.text_area("予定の入力 (日時と内容)", placeholder="例：明日の15時にトヨペットで納車予定", height=80)
     
-    # 通知設定を別枠で作成
+    st.write("**② 通知で送ってほしい内容（任意）**")
+    notification_memo = st.text_area("通知用メモ", placeholder="例：印鑑と住民票を忘れないこと！", height=80)
+    
     notify_options = {
-        "🤖 AIにおまかせ (メモから自動判断)": "auto",
+        "🤖 AIにおまかせ (1時間前)": 60,
         "🔕 通知しない": 0,
         "⏳ 15分前": 15,
         "⏳ 1時間前": 60,
@@ -143,31 +161,27 @@ with tab1:
     }
     selected_notify = st.selectbox("通知のタイミング", list(notify_options.keys()))
     
-    if st.button("✨ AIでカレンダーに追加", type="primary"):
+    if st.button("✨ カレンダーに追加", type="primary"):
         if memo_input:
             with st.spinner("AIがカレンダーに登録中..."):
                 schedule_data = extract_schedule_from_memo(memo_input)
                 if schedule_data:
-                    # UIで選んだ通知設定を反映 ("auto"以外の場合)
                     notify_val = notify_options[selected_notify]
-                    if notify_val != "auto":
-                        schedule_data["notify_minutes_before"] = notify_val
-                    
                     new_id = str(uuid.uuid4())
                     row = [
                         new_id,
                         schedule_data.get("title", "名称未設定"),
                         schedule_data.get("start_time", ""),
                         schedule_data.get("end_time", ""),
-                        schedule_data.get("memo", memo_input),
-                        schedule_data.get("notify_minutes_before", 60),
+                        notification_memo, # 通知用メモを保存
+                        notify_val,
                         "FALSE"
                     ]
                     sheet.append_row(row)
                     st.success(f"✅ カレンダーに追加しました！")
                     st.balloons()
         else:
-            st.warning("予定メモを入力してください。")
+            st.warning("予定の入力欄に文字を入れてください。")
 
 # 【タブ2: カレンダー表示】
 with tab2:
@@ -178,23 +192,23 @@ with tab2:
             "title": r["title"],
             "start": r["start_time"],
             "end": r["end_time"],
-            # 詳細表示用の隠しデータ
             "extendedProps": {
                 "memo": r["memo"],
                 "notify": r["notify_minutes_before"]
             }
         })
     
+    # 日本語化 ＆ スクロールなし設定
     calendar_options = {
+        "locale": "ja", # 日本語化
+        "contentHeight": "auto", # スクロールバーを消す
         "headerToolbar": {"left": "prev,next", "center": "title", "right": "dayGridMonth,timeGridWeek"},
         "initialView": "dayGridMonth",
-        "buttonText": {"month": "月", "week": "週"}
+        "buttonText": {"today": "今日", "month": "月", "week": "週"}
     }
     
-    # callbacks=['eventClick'] をつけることでタップに反応させる
     cal = calendar(events=events, options=calendar_options, callbacks=['eventClick'])
     if cal.get("eventClick"):
-        # タップされたら詳細ダイアログを表示
         show_event_details(cal["eventClick"]["event"])
 
 # 【タブ3: 予定一覧・編集・コピー】
@@ -202,13 +216,16 @@ with tab3:
     if not records:
         st.info("予定はまだありません。")
     else:
-        for r in reversed(records):
-            copy_text = f"【{r['title']}】\n日時: {r['start_time']} 〜 {r['end_time']}\n詳細: {r['memo']}"
+        # 開始日時が近い順に並び替え（未来の予定から順に）
+        sorted_records = sorted(records, key=lambda x: x['start_time'], reverse=False)
+        
+        for r in sorted_records:
+            copy_text = f"【{r['title']}】\n日時: {r['start_time']} 〜 {r['end_time']}\nメモ: {r['memo']}"
             
             with st.expander(f"📌 {r['title']} ({r['start_time'][:10]})"):
                 st.write(f"**時間**: {r['start_time']} 〜 {r['end_time']}")
                 st.write(f"**通知**: {r['notify_minutes_before']}分前")
-                st.write(f"**詳細**: {r['memo']}")
+                st.write(f"**メモ**: {r['memo']}")
                 
                 st.markdown("👇 **テキストをコピー**")
                 st.code(copy_text, language="text")
