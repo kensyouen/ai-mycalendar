@@ -1,0 +1,29 @@
+name: Auto Notification
+
+on:
+  schedule:
+    - cron: '*/15 * * * *' # 15分毎に自動実行
+  workflow_dispatch: # 手動テスト実行用ボタン
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install gspread google-auth requests pytz
+
+      - name: Run notification script
+        env:
+          SPREADSHEET_URL: ${{ secrets.SPREADSHEET_URL }}
+          GCP_SA_JSON: ${{ secrets.GCP_SA_JSON }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          LINE_ACCESS_TOKEN: ${{ secrets.LINE_ACCESS_TOKEN }}
+        run: python auto.py
