@@ -24,8 +24,37 @@ st.markdown("""
     .stButton > button[data-testid="baseButton-primary"] { background-color: #007AFF; color: white; }
     div[data-baseweb="input"] > div, div[data-baseweb="textarea"] > textarea, div[data-baseweb="select"] > div { border-radius: 12px !important; border: 1px solid #E5E5EA !important; background-color: #FFFFFF !important; }
     div[data-testid="stDialog"] > div { border-radius: 20px; }
+    /* ロック画面用のスタイル */
+    .lock-icon { font-size: 50px; text-align: center; margin-bottom: 10px; margin-top: 50px;}
+    .lock-title { text-align: center; color: #1C1C1E; margin-bottom: 30px; font-weight: 600;}
 </style>
 """, unsafe_allow_html=True)
+
+# --- 暗証番号ロック機能 ---
+# StreamlitのSecretsからパスコードを取得 (設定がなければデフォルトは 1234)
+APP_PIN = os.environ.get("APP_PIN", "1234")
+
+if 'authenticated' not in st.session_state:
+    st.session_state['authenticated'] = False
+
+if not st.session_state['authenticated']:
+    st.markdown("<div class='lock-icon'>🔒</div>", unsafe_allow_html=True)
+    st.markdown("<h2 class='lock-title'>アプリがロックされています</h2>", unsafe_allow_html=True)
+    
+    with st.form("login_form"):
+        pin_input = st.text_input("暗証番号", type="password", placeholder="パスコードを入力")
+        submit_btn = st.form_submit_button("🔓 ロック解除", type="primary")
+        
+        if submit_btn:
+            if pin_input == APP_PIN:
+                st.session_state['authenticated'] = True
+                st.rerun()
+            else:
+                st.error("❌ 暗証番号が間違っています")
+    
+    st.stop() # 認証されるまで以降のプログラム(カレンダー等)は一切実行させない
+
+# === ここから下は認証成功後のみ実行される ===
 
 # --- 初期設定 ---
 JST = pytz.timezone('Asia/Tokyo')
@@ -113,7 +142,7 @@ def show_event_details(event):
     if start_str and end_str:
         start_date = start_str.split(" ")[0]
         end_date = end_str.split(" ")[0]
-        if start_date == end_date: # 同じ日なら終了日は時間だけ表示
+        if start_date == end_date:
             st.write(f"**⏰ 日時:** {start_str} 〜 {end_str.split(' ')[1]}")
         else:
             st.write(f"**⏰ 日時:** {start_str} 〜 {end_str}")
